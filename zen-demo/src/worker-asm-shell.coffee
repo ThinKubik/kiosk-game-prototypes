@@ -55,7 +55,12 @@
         Math.imul = (a, b) -> a * b
 
     # Allocate heap
-    @heap = new ArrayBuffer 0x800000
+    # 64MB: accumulate needs two width*height*4-byte buffers side by side,
+    # so this covers canvases up to ~8 megapixels (e.g. a full 3840x2160
+    # viewport at 1x). The original 8MB only covered ~1 megapixel, which
+    # overflowed once the canvas grew from a fixed 1024x576 box to fill
+    # the whole viewport.
+    @heap = new ArrayBuffer 0x4000000
     @F32 = new Float32Array @heap
     @U32 = new Uint32Array @heap
 
