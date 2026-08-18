@@ -127,9 +127,9 @@ class Renderer
         isMobileSafari = isMobile and isAppleWebKit
 
         if isChrome or isMobileSafari or TestAsmJs()
-            @workerURI = 'rayworker-asm.js?v=4'
+            @workerURI = 'rayworker-asm.js?v=5'
         else
-            @workerURI = 'rayworker.js?v=4'
+            @workerURI = 'rayworker.js?v=5'
 
     newWorker: ->
         w = new Worker(@workerURI)

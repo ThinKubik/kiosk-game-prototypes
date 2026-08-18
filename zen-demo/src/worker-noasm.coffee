@@ -73,9 +73,9 @@ lineLoop = (c, i, e, b, y, g, u, v) ->
         i += u
 
 
-# Ray density (rays per pixel) below which we stop normalizing brightness by
-# the true ray count. See job_render.
-kMinRayDensity = 0.02
+# Ray count below which we stop normalizing brightness by the true ray count.
+# See job_render.
+kMinRaysForExposure = 2000
 
 
 accumLoop = (s, d) ->
@@ -422,10 +422,9 @@ else
 
     pix = new Uint8ClampedArray(4 * @accumulator.length)
 
-    # Floor the divisor so sparse early frames fade up from black instead of
+    # Floor the divisor so very sparse frames fade up from black instead of
     # burning in as hard streaks. See the matching comment in the asm worker.
-    minRays = kMinRayDensity * @accumulator.length
-    br = Math.exp(1 + 10 * msg.exposure) / Math.max(@raysTraced, minRays)
+    br = Math.exp(1 + 10 * msg.exposure) / Math.max(@raysTraced, kMinRaysForExposure)
     renderLoop(@accumulator, pix, br)
 
     @postMessage({

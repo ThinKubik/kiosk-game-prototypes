@@ -83,9 +83,9 @@
 # Utilities
 
 
-# Ray density (rays per pixel) below which we stop normalizing brightness by
-# the true ray count. See job_render.
-kMinRayDensity = 0.02
+# Ray count below which we stop normalizing brightness by the true ray count.
+# See job_render.
+kMinRaysForExposure = 2000
 
 
 alloc32 = (ptr, width, height) ->
@@ -231,11 +231,15 @@ alloc32 = (ptr, width, height) ->
     # streak. It is worst right after page load, when the conservative initial
     # speed estimate means the first interactive frame casts only ~100 rays.
     #
-    # Hold the divisor at a floor proportional to canvas area, so a sparse
-    # frame fades up from black instead of flashing. Once enough rays have
-    # landed the floor no longer applies and exposure is exactly as before.
-    minRays = kMinRayDensity * msg.width * msg.height
-    br = Math.exp(1 + 10 * msg.exposure) / Math.max(@raysTraced, minRays)
+    # Hold the divisor at a floor so a very sparse frame fades up from black
+    # instead of flashing. The streaks are a low-sample variance artifact and
+    # measurement shows they only appear around 100 rays: by 300 rays nothing
+    # is blown out any more, at 1080p and at 4K alike. So the floor is an
+    # absolute ray count, not scaled by canvas area -- scaling by area put the
+    # floor above the ~25k rays an interactive frame casts, which dimmed the
+    # scene while a line was being dragged. Above the floor, exposure is
+    # exactly as before.
+    br = Math.exp(1 + 10 * msg.exposure) / Math.max(@raysTraced, kMinRaysForExposure)
 
     n = msg.width * msg.height
     @AsmFn.renderLoop(accumulator, pixels, n, br)
