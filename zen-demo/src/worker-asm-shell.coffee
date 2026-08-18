@@ -180,6 +180,13 @@ alloc32 = (ptr, width, height) ->
     # Input buffer
     counts = new Uint32Array msg.counts
 
+    # Discard results traced at a different canvas size than the one this
+    # worker's accumulator is sized for. Batch workers can still have a trace
+    # in flight from before a resize, and writing those counts at `src` would
+    # run past the end of the heap. Also covers accumulate arriving before any
+    # firstTrace has set @width/@height (NaN|0 == 0, so this bails).
+    return if counts.length != ((@width * @height) | 0)
+
     if msg.cookie > @cookie
         # Newer cookie; start over
 
