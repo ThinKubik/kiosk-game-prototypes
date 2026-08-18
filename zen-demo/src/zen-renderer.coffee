@@ -59,7 +59,6 @@ class Renderer
 
     constructor: (canvasId) ->
         @canvas = document.getElementById(canvasId)
-        @canvas.addEventListener('resize', (e) => @resize())
 
         # We create one 'interactive' worker (where we do accumulation and merges).
         # All other workers are 'batch' workers, which perform bulk background rendering.
@@ -81,6 +80,22 @@ class Renderer
         @showSegments = 0
 
         @resize()
+
+        # Canvas elements never fire a 'resize' event, so the listener that used
+        # to be here was dead code. That was harmless upstream, where the
+        # workspace was a fixed 1024x576 box, but this build stretches the
+        # canvas over the whole viewport, so its size really does change and
+        # something has to notice.
+        #
+        # Register both mechanisms rather than picking one. They overlap, but
+        # they do not cover the same ground: the window event is what fires
+        # when the browser window itself is dragged to a new size, while a
+        # ResizeObserver also catches the canvas box changing for reasons that
+        # never touch the window (a CSS or layout change, or being embedded in
+        # a frame). scheduleResize() debounces and resizeToCanvas() returns
+        # early when the size is unchanged, so firing twice costs nothing.
+        window.addEventListener('resize', (e) => @scheduleResize())
+        new ResizeObserver(() => @scheduleResize()).observe(@canvas) if window.ResizeObserver
 
     browserSupported: ->
         # Does this browser have the features we need?
@@ -127,9 +142,9 @@ class Renderer
         isMobileSafari = isMobile and isAppleWebKit
 
         if isChrome or isMobileSafari or TestAsmJs()
-            @workerURI = 'rayworker-asm.js?v=5'
+            @workerURI = 'rayworker-asm.js?v=6'
         else
-            @workerURI = 'rayworker.js?v=5'
+            @workerURI = 'rayworker.js?v=6'
 
     newWorker: ->
         w = new Worker(@workerURI)
@@ -185,6 +200,48 @@ class Renderer
 
     start: ->
         @running = true
+
+    scheduleResize: ->
+        # Coalesce bursts of resize events. Re-initializing the canvas throws
+        # away the accumulated histogram, so only do it once the window settles.
+        window.clearTimeout(@resizeTimer) if @resizeTimer
+        @resizeTimer = window.setTimeout((=> @resizeToCanvas()), 150)
+
+    resizeToCanvas: ->
+        # Re-read the canvas size and restart rendering into it.
+        #
+        # Without this the backing store keeps the dimensions it had at load
+        # and the browser just stretches that bitmap over the new size: the
+        # light source stays at the old centre, drawn lines land somewhere
+        # other than the cursor, and growing the window leaves you looking at
+        # a scaled-up corner of a stale image.
+
+        return unless @canvas.clientWidth and @canvas.clientHeight
+        return if @canvas.clientWidth == @width and @canvas.clientHeight == @height
+
+        oldWidth = @width
+        oldHeight = @height
+        wasDefaultLight = @isDefaultLightSource()
+        lightFracX = if oldWidth then @lightX / oldWidth else 0.5
+        lightFracY = if oldHeight then @lightY / oldHeight else 0.5
+
+        @resize()
+
+        if oldWidth and oldHeight
+            # Carry the drawing over into the new coordinate space rather than
+            # discarding what the user has made.
+            sx = @width / oldWidth
+            sy = @height / oldHeight
+            for s in @segments
+                s.x0 *= sx
+                s.y0 *= sy
+                s.x1 *= sx
+                s.y1 *= sy
+
+            # @resize() re-centres the light; put it back if it had been moved.
+            @moveLight [lightFracX * @width, lightFracY * @height] unless wasDefaultLight
+
+        @clear()
 
     resize: ->
         # Set up our canvas

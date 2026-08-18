@@ -13,7 +13,10 @@
     <link rel="apple-touch-icon" sizes="114x114" href="logo-114.png" />
     <link rel="apple-touch-icon" sizes="144x144" href="logo-144.png" />
     <link rel="Shortcut Icon" href="favicon.ico" type="image/x-icon" />
-    <script src='zenphoton.js' type='text/javascript'></script>
+    <!-- Version query busts stale browser caches. Bump it whenever
+         zenphoton.js is rebuilt: it also selects the worker version, so a
+         cached copy of this file silently pins the old workers too. -->
+    <script src='zenphoton.js?v=6' type='text/javascript'></script>
     <style>
 
         @font-face {
