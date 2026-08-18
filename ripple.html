@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Tune Into You — Ripple Toy Prototype</title>
+<style>
+  :root {
+    --bg-deep: #0d1e2b;
+    --bg-mid: #163247;
+    --strip-bg: rgba(255,255,255,0.06);
+    --ripple-a: #8fd0c9;
+    --ripple-b: #6fa8c9;
+    --ripple-c: #b9d8c7;
+    --ink: #eef3ef;
+    --ink-dim: rgba(238,243,239,0.55);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: radial-gradient(ellipse at top, var(--bg-mid), var(--bg-deep));
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--ink);
+    touch-action: none;
+    user-select: none;
+  }
+
+  .sound-strip {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: 56px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 16px;
+    background: var(--strip-bg);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    z-index: 20;
+  }
+  .sound-strip .chip {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    font-size: 13px;
+    letter-spacing: 0.02em;
+  }
+  .sound-strip .chip .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--ripple-a);
+  }
+  .sound-strip .expand {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--ink-dim);
+    padding: 6px 10px;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  #stage {
+    position: fixed;
+    top: 56px; left: 0; right: 0; bottom: 0;
+    overflow: hidden;
+  }
+
+  .prompt {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px;
+    pointer-events: none;
+    z-index: 5;
+    transition: opacity 1.2s ease;
+  }
+  .prompt.hide { opacity: 0; }
+  .prompt .title {
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    text-transform: lowercase;
+    font-weight: 500;
+  }
+  .prompt .sub {
+    font-size: 12.5px;
+    color: var(--ink-dim);
+  }
+
+  .ripple {
+    position: absolute;
+    border-radius: 50%;
+    border: 1.5px solid rgba(238,243,239,0.5);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    animation: expand 2.6s ease-out forwards;
+  }
+  .orb {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    filter: blur(0.5px);
+    animation: orbLife 2.6s ease-out forwards;
+  }
+
+  @keyframes expand {
+    0%   { width: 0px; height: 0px; opacity: 0.9; }
+    100% { width: 340px; height: 340px; opacity: 0; }
+  }
+  @keyframes orbLife {
+    0%   { width: 14px; height: 14px; opacity: 0.95; }
+    60%  { opacity: 0.5; }
+    100% { width: 90px; height: 90px; opacity: 0; }
+  }
+
+  .timeout-ring {
+    position: fixed; top: 12px; right: 12px;
+    width: 32px; height: 32px;
+    z-index: 25;
+    opacity: 0.55;
+  }
+</style>
+</head>
+<body>
+
+  <div class="sound-strip">
+    <div class="chip"><span class="dot"></span>forest</div>
+    <div class="chip"><span class="dot"></span>waves</div>
+    <div class="chip"><span class="dot"></span>rest</div>
+    <button class="expand" onclick="alert('This would expand the full soundboard as an overlay.')">soundboard ▾</button>
+  </div>
+
+  <svg class="timeout-ring" viewBox="0 0 36 36">
+    <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"></circle>
+    <circle id="ringProgress" cx="18" cy="18" r="15.5" fill="none" stroke="#eef3ef" stroke-width="2"
+      stroke-dasharray="97.4" stroke-dashoffset="0" transform="rotate(-90 18 18)" stroke-linecap="round"></circle>
+  </svg>
+
+  <div id="stage">
+    <div class="prompt" id="prompt">
+      <div class="title">touch anywhere</div>
+      <div class="sub">watch it drift and fade</div>
+    </div>
+  </div>
+
+<script>
+const stage = document.getElementById('stage');
+const prompt = document.getElementById('prompt');
+let hasTouchedOnce = false;
+
+const palette = ['#8fd0c9', '#6fa8c9', '#b9d8c7', '#d8c9a3'];
+
+function spawnAt(x, y) {
+  // ripple ring
+  const ripple = document.createElement('div');
+  ripple.className = 'ripple';
+  ripple.style.left = x + 'px';
+  ripple.style.top = y + 'px';
+  ripple.style.borderColor = palette[Math.floor(Math.random() * palette.length)];
+  stage.appendChild(ripple);
+  ripple.addEventListener('animationend', () => ripple.remove());
+
+  // soft orb
+  const orb = document.createElement('div');
+  orb.className = 'orb';
+  orb.style.left = (x + (Math.random() * 20 - 10)) + 'px';
+  orb.style.top = (y + (Math.random() * 20 - 10)) + 'px';
+  const c = palette[Math.floor(Math.random() * palette.length)];
+  orb.style.background = `radial-gradient(circle, ${c}aa, transparent 70%)`;
+  stage.appendChild(orb);
+  orb.addEventListener('animationend', () => orb.remove());
+
+  if (!hasTouchedOnce) {
+    hasTouchedOnce = true;
+    prompt.classList.add('hide');
+  }
+}
+
+function handlePointer(e) {
+  const rect = stage.getBoundingClientRect();
+  const points = e.touches ? Array.from(e.touches) : [e];
+  points.forEach(p => {
+    spawnAt(p.clientX - rect.left, p.clientY - rect.top);
+  });
+}
+
+let lastMoveSpawn = 0;
+function handleMove(e) {
+  const now = Date.now();
+  if (now - lastMoveSpawn < 90) return; // throttle so drags don't flood the DOM
+  lastMoveSpawn = now;
+  handlePointer(e);
+}
+
+let pointerDown = false;
+stage.addEventListener('mousedown', e => { pointerDown = true; handlePointer(e); });
+stage.addEventListener('mousemove', e => { if (pointerDown) handleMove(e); });
+window.addEventListener('mouseup', () => pointerDown = false);
+
+stage.addEventListener('touchstart', e => { handlePointer(e); e.preventDefault(); }, { passive: false });
+stage.addEventListener('touchmove', e => { handleMove(e); e.preventDefault(); }, { passive: false });
+
+/* ---------- 3 minute session -> hard reload ---------- */
+const SESSION_LENGTH_MS = 3 * 60 * 1000;
+const ringProgress = document.getElementById('ringProgress');
+const RING_CIRCUMFERENCE = 97.4;
+let sessionStart = Date.now();
+
+function tickRing() {
+  const elapsed = Date.now() - sessionStart;
+  const pct = Math.min(elapsed / SESSION_LENGTH_MS, 1);
+  ringProgress.setAttribute('stroke-dashoffset', (RING_CIRCUMFERENCE * pct).toFixed(2));
+  if (pct >= 1) {
+    hardReload();
+    return;
+  }
+  requestAnimationFrame(tickRing);
+}
+
+function hardReload() {
+  // Mirrors the existing "Restart" behavior: back to "/" for a fresh session.
+  // window.location.href = "/";
+  console.log('[prototype] 3 minute mark reached — would hard reload to "/" here.');
+  document.querySelectorAll('.ripple, .orb').forEach(el => el.remove());
+  prompt.classList.remove('hide');
+  hasTouchedOnce = false;
+  sessionStart = Date.now();
+}
+
+requestAnimationFrame(tickRing);
+</script>
+
+</body>
+</html>

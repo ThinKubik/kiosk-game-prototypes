@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Tune Into You — Sand Toy Prototype</title>
+<style>
+  :root {
+    --bg-deep: #10221f;
+    --bg-mid: #17332e;
+    --strip-bg: rgba(255,255,255,0.06);
+    --accent-moss: #7fae9a;
+    --accent-sand: #d8c9a3;
+    --accent-water: #6fa8c9;
+    --ink: #eef3ef;
+    --ink-dim: rgba(238,243,239,0.55);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: radial-gradient(ellipse at top, var(--bg-mid), var(--bg-deep));
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--ink);
+    touch-action: none;
+    user-select: none;
+  }
+
+  /* Collapsed sound strip */
+  .sound-strip {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: 56px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 16px;
+    background: var(--strip-bg);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    z-index: 20;
+  }
+  .sound-strip .chip {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    font-size: 13px;
+    letter-spacing: 0.02em;
+  }
+  .sound-strip .chip .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent-moss);
+  }
+  .sound-strip .expand {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--ink-dim);
+    padding: 6px 10px;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  /* Canvas area */
+  #canvasWrap {
+    position: fixed;
+    top: 56px; left: 0; right: 0; bottom: 0;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* Idle / prompt overlay */
+  .prompt {
+    position: fixed;
+    top: 56px; left: 0; right: 0; bottom: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 1.2s ease;
+  }
+  .prompt.hide { opacity: 0; }
+  .prompt .title {
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    text-transform: lowercase;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .prompt .sub {
+    font-size: 12.5px;
+    color: var(--ink-dim);
+  }
+
+  /* Palette selector */
+  .palette {
+    position: fixed;
+    bottom: 22px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px;
+    padding: 8px 10px;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.25);
+    backdrop-filter: blur(8px);
+    z-index: 15;
+  }
+  .swatch {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+  }
+  .swatch.active { border-color: var(--ink); }
+  .swatch[data-mat="sand"] { background: var(--accent-sand); }
+  .swatch[data-mat="water"] { background: var(--accent-water); }
+  .swatch[data-mat="moss"] { background: var(--accent-moss); }
+  .swatch[data-mat="clear"] {
+    background: transparent;
+    border: 2px solid var(--ink-dim);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: var(--ink-dim);
+  }
+
+  /* Timeout ring, subtle, top right */
+  .timeout-ring {
+    position: fixed; top: 12px; right: 12px;
+    width: 32px; height: 32px;
+    z-index: 25;
+    opacity: 0.55;
+  }
+</style>
+</head>
+<body>
+
+  <div class="sound-strip">
+    <div class="chip"><span class="dot"></span>forest</div>
+    <div class="chip"><span class="dot"></span>waves</div>
+    <div class="chip"><span class="dot"></span>rest</div>
+    <button class="expand" onclick="alert('This would expand the full soundboard as an overlay.')">soundboard ▾</button>
+  </div>
+
+  <svg class="timeout-ring" viewBox="0 0 36 36">
+    <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"></circle>
+    <circle id="ringProgress" cx="18" cy="18" r="15.5" fill="none" stroke="#eef3ef" stroke-width="2"
+      stroke-dasharray="97.4" stroke-dashoffset="0" transform="rotate(-90 18 18)" stroke-linecap="round"></circle>
+  </svg>
+
+  <div id="canvasWrap">
+    <canvas id="c"></canvas>
+    <div class="prompt" id="prompt">
+      <div class="title">touch to begin</div>
+      <div class="sub">let it fall, let it settle</div>
+    </div>
+  </div>
+
+  <div class="palette">
+    <div class="swatch active" data-mat="sand" onclick="selectMat(this,'sand')"></div>
+    <div class="swatch" data-mat="water" onclick="selectMat(this,'water')"></div>
+    <div class="swatch" data-mat="moss" onclick="selectMat(this,'moss')"></div>
+    <div class="swatch" data-mat="clear" onclick="selectMat(this,'clear')">✕</div>
+  </div>
+
+<script>
+/* ---------- Falling sand simulation ---------- */
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const CELL = 4;
+let cols, rows;
+let grid, colorGrid;
+
+const MATERIALS = {
+  sand:  { id: 1, colors: ['#d8c9a3', '#cdbb90', '#e0d3b0'], weight: 1 },
+  water: { id: 2, colors: ['#6fa8c9', '#5f97b8', '#7fb6d6'], weight: 1 },
+  moss:  { id: 3, colors: ['#7fae9a', '#6f9e8a', '#8fbeaa'], weight: 0, sticky: true },
+  empty: { id: 0 }
+};
+
+let currentMat = 'sand';
+
+function selectMat(el, mat) {
+  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  currentMat = mat;
+}
+
+function resize() {
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+  cols = Math.floor(canvas.width / CELL);
+  rows = Math.floor(canvas.height / CELL);
+  grid = new Uint8Array(cols * rows);
+  colorGrid = new Uint8Array(cols * rows);
+}
+window.addEventListener('resize', resize);
+
+function idx(x, y) { return y * cols + x; }
+
+function addParticle(px, py, mat) {
+  const x = Math.floor(px / CELL);
+  const y = Math.floor(py / CELL);
+  const radius = 2;
+  for (let dx = -radius; dx <= radius; dx++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      if (Math.random() > 0.55) continue;
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+      const i = idx(nx, ny);
+      if (grid[i] === 0) {
+        grid[i] = MATERIALS[mat].id;
+        colorGrid[i] = Math.floor(Math.random() * 3);
+      }
+    }
+  }
+}
+
+function step() {
+  for (let y = rows - 2; y >= 0; y--) {
+    const leftToRight = Math.random() > 0.5;
+    for (let xi = 0; xi < cols; xi++) {
+      const x = leftToRight ? xi : cols - 1 - xi;
+      const i = idx(x, y);
+      const v = grid[i];
+      if (v === 0) continue;
+
+      const below = idx(x, y + 1);
+      if (grid[below] === 0) {
+        grid[below] = v; colorGrid[below] = colorGrid[i];
+        grid[i] = 0;
+        continue;
+      }
+      if (v === MATERIALS.moss.id) continue; // moss doesn't flow
+
+      const dir = Math.random() > 0.5 ? 1 : -1;
+      const dx1 = x + dir, dx2 = x - dir;
+      const belowDiag1 = dx1 >= 0 && dx1 < cols ? idx(dx1, y + 1) : -1;
+      const belowDiag2 = dx2 >= 0 && dx2 < cols ? idx(dx2, y + 1) : -1;
+
+      if (v === MATERIALS.water.id) {
+        if (belowDiag1 !== -1 && grid[belowDiag1] === 0) {
+          grid[belowDiag1] = v; colorGrid[belowDiag1] = colorGrid[i]; grid[i] = 0; continue;
+        }
+        if (belowDiag2 !== -1 && grid[belowDiag2] === 0) {
+          grid[belowDiag2] = v; colorGrid[belowDiag2] = colorGrid[i]; grid[i] = 0; continue;
+        }
+        const side = x + dir;
+        if (side >= 0 && side < cols && grid[idx(side, y)] === 0 && Math.random() > 0.3) {
+          grid[idx(side, y)] = v; colorGrid[idx(side, y)] = colorGrid[i]; grid[i] = 0;
+        }
+        continue;
+      }
+
+      // sand
+      if (belowDiag1 !== -1 && grid[belowDiag1] === 0) {
+        grid[belowDiag1] = v; colorGrid[belowDiag1] = colorGrid[i]; grid[i] = 0; continue;
+      }
+      if (belowDiag2 !== -1 && grid[belowDiag2] === 0) {
+        grid[belowDiag2] = v; colorGrid[belowDiag2] = colorGrid[i]; grid[i] = 0; continue;
+      }
+    }
+  }
+}
+
+const idToMat = { 1: 'sand', 2: 'water', 3: 'moss' };
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const v = grid[idx(x, y)];
+      if (v === 0) continue;
+      const mat = idToMat[v];
+      ctx.fillStyle = MATERIALS[mat].colors[colorGrid[idx(x, y)]];
+      ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+    }
+  }
+}
+
+let loopRunning = true;
+function loop() {
+  if (loopRunning) {
+    step();
+    render();
+  }
+  requestAnimationFrame(loop);
+}
+
+/* ---------- Input handling ---------- */
+let pointerDown = false;
+let hasTouchedOnce = false;
+const prompt = document.getElementById('prompt');
+
+function handlePointer(e) {
+  const rect = canvas.getBoundingClientRect();
+  const points = e.touches ? Array.from(e.touches) : [e];
+  points.forEach(p => {
+    const x = p.clientX - rect.left;
+    const y = p.clientY - rect.top;
+    if (currentMat === 'clear') {
+      clearArea(x, y);
+    } else {
+      addParticle(x, y, currentMat);
+    }
+  });
+  if (!hasTouchedOnce) {
+    hasTouchedOnce = true;
+    prompt.classList.add('hide');
+  }
+  resetIdleTimer();
+}
+
+function clearArea(px, py) {
+  const x = Math.floor(px / CELL);
+  const y = Math.floor(py / CELL);
+  const r = 6;
+  for (let dx = -r; dx <= r; dx++) {
+    for (let dy = -r; dy <= r; dy++) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+      if (dx*dx + dy*dy > r*r) continue;
+      grid[idx(nx, ny)] = 0;
+    }
+  }
+}
+
+canvas.addEventListener('mousedown', e => { pointerDown = true; handlePointer(e); });
+canvas.addEventListener('mousemove', e => { if (pointerDown) handlePointer(e); });
+window.addEventListener('mouseup', () => pointerDown = false);
+
+canvas.addEventListener('touchstart', e => { handlePointer(e); e.preventDefault(); }, { passive: false });
+canvas.addEventListener('touchmove', e => { handlePointer(e); e.preventDefault(); }, { passive: false });
+
+/* ---------- 3 minute idle -> hard reload ---------- */
+const SESSION_LENGTH_MS = 3 * 60 * 1000; // total session length, not just idle
+const ringProgress = document.getElementById('ringProgress');
+const RING_CIRCUMFERENCE = 97.4;
+let sessionStart = Date.now();
+let idleTimer = null;
+
+function resetIdleTimer() {
+  // In this prototype the ring reflects total session time, uncomment below
+  // to make it purely "idle since last touch" instead of session length.
+  // sessionStart = Date.now();
+}
+
+function tickRing() {
+  const elapsed = Date.now() - sessionStart;
+  const pct = Math.min(elapsed / SESSION_LENGTH_MS, 1);
+  ringProgress.setAttribute('stroke-dashoffset', (RING_CIRCUMFERENCE * pct).toFixed(2));
+  if (pct >= 1) {
+    hardReload();
+    return;
+  }
+  requestAnimationFrame(tickRing);
+}
+
+function hardReload() {
+  // Mirrors the existing "Restart" behavior: back to "/" for a fresh session.
+  // window.location.href = "/";
+  console.log('[prototype] 3 minute mark reached — would hard reload to "/" here.');
+  // For prototype purposes we just restart the ring + clear the canvas
+  // instead of actually navigating away.
+  grid.fill(0);
+  sessionStart = Date.now();
+}
+
+resize();
+loop();
+requestAnimationFrame(tickRing);
+</script>
+
+</body>
+</html>
