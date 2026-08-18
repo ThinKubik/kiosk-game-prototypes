@@ -25,50 +25,33 @@
     user-select: none;
   }
 
-  /* Collapsed sound strip */
-  .sound-strip {
-    position: fixed; top: 0; left: 0; right: 0;
-    height: 56px;
-    display: flex; align-items: center; gap: 10px;
-    padding: 0 16px;
-    background: var(--strip-bg);
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    z-index: 20;
-  }
-  .sound-strip .chip {
+  /* Back to picker */
+  .back-btn {
+    position: fixed; top: 14px; left: 14px;
+    z-index: 30;
     display: flex; align-items: center; gap: 6px;
-    padding: 6px 12px;
+    padding: 8px 14px;
     border-radius: 999px;
-    background: rgba(255,255,255,0.08);
-    font-size: 13px;
-    letter-spacing: 0.02em;
-  }
-  .sound-strip .chip .dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--accent-moss);
-  }
-  .sound-strip .expand {
-    margin-left: auto;
-    font-size: 12px;
-    color: var(--ink-dim);
-    padding: 6px 10px;
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: blur(8px);
     border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 999px;
-    background: transparent;
+    color: var(--ink);
+    font-size: 13px;
+    text-decoration: none;
   }
+  .back-btn:active { background: rgba(0,0,0,0.5); }
 
   /* Canvas area */
   #canvasWrap {
     position: fixed;
-    top: 56px; left: 0; right: 0; bottom: 0;
+    top: 0; left: 0; right: 0; bottom: 0;
   }
   canvas { display: block; width: 100%; height: 100%; }
 
   /* Idle / prompt overlay */
   .prompt {
     position: fixed;
-    top: 56px; left: 0; right: 0; bottom: 0;
+    top: 0; left: 0; right: 0; bottom: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 6px;
     pointer-events: none;
@@ -114,30 +97,11 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 10px; color: var(--ink-dim);
   }
-
-  /* Timeout ring, subtle, top right */
-  .timeout-ring {
-    position: fixed; top: 12px; right: 12px;
-    width: 32px; height: 32px;
-    z-index: 25;
-    opacity: 0.55;
-  }
 </style>
 </head>
 <body>
 
-  <div class="sound-strip">
-    <div class="chip"><span class="dot"></span>forest</div>
-    <div class="chip"><span class="dot"></span>waves</div>
-    <div class="chip"><span class="dot"></span>rest</div>
-    <button class="expand" onclick="alert('This would expand the full soundboard as an overlay.')">soundboard ▾</button>
-  </div>
-
-  <svg class="timeout-ring" viewBox="0 0 36 36">
-    <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"></circle>
-    <circle id="ringProgress" cx="18" cy="18" r="15.5" fill="none" stroke="#eef3ef" stroke-width="2"
-      stroke-dasharray="97.4" stroke-dashoffset="0" transform="rotate(-90 18 18)" stroke-linecap="round"></circle>
-  </svg>
+  <a class="back-btn" href="index.html">← Back</a>
 
   <div id="canvasWrap">
     <canvas id="c"></canvas>
@@ -299,7 +263,6 @@ function handlePointer(e) {
     hasTouchedOnce = true;
     prompt.classList.add('hide');
   }
-  resetIdleTimer();
 }
 
 function clearArea(px, py) {
@@ -323,43 +286,8 @@ window.addEventListener('mouseup', () => pointerDown = false);
 canvas.addEventListener('touchstart', e => { handlePointer(e); e.preventDefault(); }, { passive: false });
 canvas.addEventListener('touchmove', e => { handlePointer(e); e.preventDefault(); }, { passive: false });
 
-/* ---------- 3 minute idle -> hard reload ---------- */
-const SESSION_LENGTH_MS = 3 * 60 * 1000; // total session length, not just idle
-const ringProgress = document.getElementById('ringProgress');
-const RING_CIRCUMFERENCE = 97.4;
-let sessionStart = Date.now();
-let idleTimer = null;
-
-function resetIdleTimer() {
-  // In this prototype the ring reflects total session time, uncomment below
-  // to make it purely "idle since last touch" instead of session length.
-  // sessionStart = Date.now();
-}
-
-function tickRing() {
-  const elapsed = Date.now() - sessionStart;
-  const pct = Math.min(elapsed / SESSION_LENGTH_MS, 1);
-  ringProgress.setAttribute('stroke-dashoffset', (RING_CIRCUMFERENCE * pct).toFixed(2));
-  if (pct >= 1) {
-    hardReload();
-    return;
-  }
-  requestAnimationFrame(tickRing);
-}
-
-function hardReload() {
-  // Mirrors the existing "Restart" behavior: back to "/" for a fresh session.
-  // window.location.href = "/";
-  console.log('[prototype] 3 minute mark reached — would hard reload to "/" here.');
-  // For prototype purposes we just restart the ring + clear the canvas
-  // instead of actually navigating away.
-  grid.fill(0);
-  sessionStart = Date.now();
-}
-
 resize();
 loop();
-requestAnimationFrame(tickRing);
 </script>
 
 </body>
