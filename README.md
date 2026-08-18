@@ -6,6 +6,7 @@ index page linking to both.
 - `index.html` — picker page
 - `sand.html` — falling-sand toy (sand / water / moss, plus eraser)
 - `ripple.html` — tap-to-ripple toy
+- `zen-demo/` — Zen Photon Garden (draw walls, place a light source, watch rays accumulate)
 
 ## Deploy in ~2 minutes
 
