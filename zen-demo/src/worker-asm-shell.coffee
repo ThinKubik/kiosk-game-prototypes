@@ -83,6 +83,11 @@
 # Utilities
 
 
+# Ray density (rays per pixel) below which we stop normalizing brightness by
+# the true ray count. See job_render.
+kMinRayDensity = 0.02
+
+
 alloc32 = (ptr, width, height) ->
     return ptr + (4 * width * height)
 
@@ -218,8 +223,19 @@ alloc32 = (ptr, width, height) ->
     pixels = alloc32(accumulator, msg.width, msg.height)
     end = alloc32(pixels, msg.width, msg.height)
 
-    # Brightness calculation
-    br = Math.exp(1 + 10 * msg.exposure) / @raysTraced
+    # Brightness calculation.
+    #
+    # Normalizing purely by @raysTraced blows out the first frames after every
+    # edit: the accumulator restarts on each scene change, so the divisor is
+    # briefly tiny and each individual ray path burns in as a hard white
+    # streak. It is worst right after page load, when the conservative initial
+    # speed estimate means the first interactive frame casts only ~100 rays.
+    #
+    # Hold the divisor at a floor proportional to canvas area, so a sparse
+    # frame fades up from black instead of flashing. Once enough rays have
+    # landed the floor no longer applies and exposure is exactly as before.
+    minRays = kMinRayDensity * msg.width * msg.height
+    br = Math.exp(1 + 10 * msg.exposure) / Math.max(@raysTraced, minRays)
 
     n = msg.width * msg.height
     @AsmFn.renderLoop(accumulator, pixels, n, br)

@@ -73,6 +73,11 @@ lineLoop = (c, i, e, b, y, g, u, v) ->
         i += u
 
 
+# Ray density (rays per pixel) below which we stop normalizing brightness by
+# the true ray count. See job_render.
+kMinRayDensity = 0.02
+
+
 accumLoop = (s, d) ->
     # Unrolled inner loop for summing histogram data.
 
@@ -416,7 +421,11 @@ else
     # Using the current accumulator state, render an RGBA image.
 
     pix = new Uint8ClampedArray(4 * @accumulator.length)
-    br = Math.exp(1 + 10 * msg.exposure) / @raysTraced
+
+    # Floor the divisor so sparse early frames fade up from black instead of
+    # burning in as hard streaks. See the matching comment in the asm worker.
+    minRays = kMinRayDensity * @accumulator.length
+    br = Math.exp(1 + 10 * msg.exposure) / Math.max(@raysTraced, minRays)
     renderLoop(@accumulator, pix, br)
 
     @postMessage({
