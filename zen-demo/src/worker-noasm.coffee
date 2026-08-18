@@ -73,9 +73,9 @@ lineLoop = (c, i, e, b, y, g, u, v) ->
         i += u
 
 
-# Ray count below which we stop normalizing brightness by the true ray count.
-# See job_render.
-kMinRaysForExposure = 2000
+# Rays per pixel below which we stop normalizing brightness by the true ray
+# count. See job_render.
+kMinRayDensity = 0.00025
 
 
 accumLoop = (s, d) ->
@@ -424,7 +424,8 @@ else
 
     # Floor the divisor so very sparse frames fade up from black instead of
     # burning in as hard streaks. See the matching comment in the asm worker.
-    br = Math.exp(1 + 10 * msg.exposure) / Math.max(@raysTraced, kMinRaysForExposure)
+    minRays = kMinRayDensity * @accumulator.length
+    br = Math.exp(1 + 10 * msg.exposure) / Math.max(@raysTraced, minRays)
     renderLoop(@accumulator, pix, br)
 
     @postMessage({

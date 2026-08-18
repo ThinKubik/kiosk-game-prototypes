@@ -83,9 +83,9 @@
 # Utilities
 
 
-# Ray count below which we stop normalizing brightness by the true ray count.
-# See job_render.
-kMinRaysForExposure = 2000
+# Rays per pixel below which we stop normalizing brightness by the true ray
+# count. See job_render.
+kMinRayDensity = 0.00025
 
 
 alloc32 = (ptr, width, height) ->
@@ -232,14 +232,19 @@ alloc32 = (ptr, width, height) ->
     # speed estimate means the first interactive frame casts only ~100 rays.
     #
     # Hold the divisor at a floor so a very sparse frame fades up from black
-    # instead of flashing. The streaks are a low-sample variance artifact and
-    # measurement shows they only appear around 100 rays: by 300 rays nothing
-    # is blown out any more, at 1080p and at 4K alike. So the floor is an
-    # absolute ray count, not scaled by canvas area -- scaling by area put the
-    # floor above the ~25k rays an interactive frame casts, which dimmed the
-    # scene while a line was being dragged. Above the floor, exposure is
-    # exactly as before.
-    br = Math.exp(1 + 10 * msg.exposure) / Math.max(@raysTraced, kMinRaysForExposure)
+    # instead of flashing.
+    #
+    # The floor scales with canvas area, because the streaks are a low-sample
+    # variance artifact and how sparse a given ray count looks depends on how
+    # many pixels it is spread over: at 1080p the streaks are gone by ~300
+    # rays, at 4K they survive well past that.
+    #
+    # Keep the constant small. Brightness near the light falls off as 1/r, so
+    # scaling brightness by k also shrinks the visible light blob by k -- too
+    # high a floor visibly shrinks the light on every frame drawn during a
+    # drag, which is exactly what a value 80x this one did.
+    minRays = kMinRayDensity * msg.width * msg.height
+    br = Math.exp(1 + 10 * msg.exposure) / Math.max(@raysTraced, minRays)
 
     n = msg.width * msg.height
     @AsmFn.renderLoop(accumulator, pixels, n, br)
